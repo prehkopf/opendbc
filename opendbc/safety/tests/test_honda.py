@@ -524,6 +524,15 @@ class TestHondaNidecStockLongitudinalSafety(HondaPcmEnableBase, TestHondaNidecSa
   def _send_acc_hud_msg(self, pcm_gas, pcm_speed):
     pass
 
+  def test_block_aeb(self):
+    # stock longitudinal never sends BRAKE_COMMAND, so AEB-flagged commands must be blocked too
+    for controls_allowed in [True, False]:
+      self.safety.set_controls_allowed(controls_allowed)
+      for aeb_signals in ({"AEB_REQ_1": 1}, {"AEB_REQ_2": 1}, {"AEB_STATUS": 1}):
+        values = {"COMPUTER_BRAKE": 0, **aeb_signals}
+        msg = self.packer.make_can_msg_safety("BRAKE_COMMAND", self.PT_BUS, values)
+        self.assertFalse(self._tx(msg), msg=aeb_signals)
+
   def test_acc_hud_safety_check(self):
     pass
 

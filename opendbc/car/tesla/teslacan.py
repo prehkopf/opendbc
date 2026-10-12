@@ -1,7 +1,6 @@
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.tesla.values import CANBUS, CarControllerParams
 from opendbc.car.tesla.values import TeslaFlags
-from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
 
 
 def get_steer_ctrl_type(flags: int, ctrl_type: int) -> int:
