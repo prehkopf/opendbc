@@ -41,24 +41,17 @@ class CarControllerParams:
   STEER_GLOBAL_MIN_SPEED = 3 * CV.MPH_TO_MS
 
   def __init__(self, CP):
-    if CP.carFingerprint in (CAR.HONDA_CRV, CAR.HONDA_CRV_EU, CAR.ACURA_RDX):
-      self.STEER_MAX = 1000  # TODO: determine if there is a dead zone at the top end
-    elif CP.carFingerprint in (CAR.ACURA_ILX, CAR.HONDA_CRV_5G, CAR.ACURA_RDX_3G, CAR.ACURA_TLX_2G_MMR, CAR.ACURA_MDX_4G,
-                               CAR.ACURA_ADX):
-      self.STEER_MAX = 3840  # TODO: determine if there is a dead zone at the top end (ACURA_ILX)
-    elif CP.carFingerprint in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_CIVIC_2022, CAR.HONDA_ACCORD,
-                               CAR.HONDA_CRV_HYBRID, CAR.HONDA_FIT, CAR.HONDA_FREED, CAR.HONDA_HRV, CAR.HONDA_HRV_3G,
-                               CAR.HONDA_ODYSSEY, CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G,
-                               CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_PRELUDE_6G):
-      # TODO: determine if there is a dead zone at the top end (except HONDA_FREED, HONDA_HRV, HONDA_HRV_3G)
-      self.STEER_MAX = 4096
-    elif CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN:
-      self.STEER_MAX = 32767  # TODO: determine if there is a dead zone at the top end
-    elif CP.carFingerprint == CAR.HONDA_PILOT_4G_MMR:
-      self.STEER_MAX = 3628
-    else:
-      # Odyssey MMR uses up to 2560 for LKA; higher RDM commands are nonlinear and also apply brake drag.
-      self.STEER_MAX = 2560
+    self.STEER_MAX = CP.lateralParams.torqueBP[-1]
+    # mirror of list (assuming first item is zero) for interp of signed request
+    # values and verify that both arrays begin at zero
+    assert CP.lateralParams.torqueBP[0] == 0
+    assert CP.lateralParams.torqueV[0] == 0
+    self.STEER_LOOKUP_BP = [v * -1 for v in CP.lateralParams.torqueBP][1:][::-1] + list(CP.lateralParams.torqueBP)
+    self.STEER_LOOKUP_V = [v * -1 for v in CP.lateralParams.torqueV][1:][::-1] + list(CP.lateralParams.torqueV)
+    if CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
+      # brikowski/opendbc Odyssey port: STEER_MAX 3840 comes from the interface torque map
+      self.STEER_DELTA_UP = 2
+      self.STEER_DELTA_DOWN = 2
 
 
 class HondaSafetyFlags(IntFlag):
@@ -71,6 +64,8 @@ class HondaSafetyFlags(IntFlag):
   # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
   RLX_STEER_BRIDGE = 64
   NO_ENGINE_DATA_MSG = 128
+  # brikowski/opendbc Odyssey long limits (upstream uses 32, which is NIDEC_HYBRID here)
+  ODYSSEY_LONG = 256
 
 
 class HondaFlags(IntFlag):
@@ -328,7 +323,7 @@ class CAR(Platforms):
     [HondaCarDocs("Honda Odyssey 2021-26", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
     CarSpecs(mass=4590 * CV.LB_TO_KG, wheelbase=3.00, steerRatio=19.4, centerToFrontRatio=0.41),
     {Bus.pt: 'acura_rdx_2020_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_RADAR,
+    flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.BOSCH_ALT_RADAR,
   )
   ACURA_TLX_2G = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura TLX 2021-23", "All")],
