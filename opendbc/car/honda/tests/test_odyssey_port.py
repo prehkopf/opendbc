@@ -22,11 +22,10 @@ from opendbc.car.honda.carcontroller import (ODYSSEY_GAS_BRIDGE_COMMAND, ODYSSEY
                                              odyssey_command_domains, odyssey_gas_command, odyssey_grade_weight,
                                              odyssey_creep_brake_accel, odyssey_low_speed_gas_command,
                                              odyssey_uphill_gas_accel_with_cap)
-from opendbc.car.honda.values import CAR, CarControllerParams, HondaFlags
+from opendbc.car.honda.values import CAR, CarControllerParams
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.interface import CarInterface
 from opendbc.car.honda.values import DBC
-
 
 
 def _sp(CP):
