@@ -2040,7 +2040,7 @@ assert response.update(60, 7, 0.0, -0.2, True, True) == -0.2
         if change == 'none':
           self.assertGreater(last_gas, 0)
         if change == 'excess':
-          self.assertIsNotNone(first_excess_brake)
+          assert first_excess_brake is not None
           self.assertLessEqual(first_excess_brake, 160 + 2 * ODYSSEY_RESPONSE_DELAY_FRAMES + 2)
 
   def test_gas_continuity_does_not_cycle_on_transient_response(self):
