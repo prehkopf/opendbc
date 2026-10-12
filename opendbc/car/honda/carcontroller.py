@@ -1524,11 +1524,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             coast_start = self.odyssey_coast_response.coast_start
             settled_coast = (not self.odyssey_brake_selected and coast_start is not None and
                              self.frame - coast_start >= 2 * ODYSSEY_RESPONSE_DELAY_FRAMES)
+            response_excess = (self.odyssey_gas_response.drivetrain == (CS.odyssey_target_gear, CS.odyssey_shift_activity) and
+                               self.odyssey_gas_response.error.x < -ODYSSEY_COAST_RELEASE_ERROR)
             passive_gas = (passive_response_eligible and accel < 0.0 and passive_accel < accel and
                            not CS.odyssey_computer_braking and
                            ((previous_gas and (CS.out.aEgo <= accel + ODYSSEY_COAST_RELEASE_ERROR or
-                                              (accel > ODYSSEY_ROAD_BRAKE_ENTRY and not self.odyssey_gas_bridge_active and
-                                               passive_accel < accel - ODYSSEY_COAST_RELEASE_ERROR))) or
+                                              (not response_excess and not self.odyssey_gas_bridge_active))) or
                             (passive_accel < accel - ODYSSEY_COAST_RELEASE_ERROR and
                              CS.odyssey_car_gas == 0.0 and CS.out.aEgo < accel - ODYSSEY_COAST_RELEASE_ERROR and
                              (settled_coast or settled_brake))))
@@ -1567,8 +1568,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                  not self.odyssey_gas_bridge_active and odyssey_pitch_valid and
                                  actuators.longControlState == LongCtrlState.pid and
                                  not CS.out.gasPressed and not CS.out.brakePressed and
-                                 gear_state_valid and
-                                 CS.out.vEgo >= ODYSSEY_LOW_SPEED_DOMAIN_VEGO and (self.gas > 0.0 or passive_gas))
+                                 gear_state_valid and (self.gas > 0.0 or passive_gas))
             available_gas = odyssey_low_speed_gas_command(self.gas, accel, CS.out.vEgo)
             correction = self.odyssey_gas_response.update(accel, CS.out.aEgo, self.odyssey_pitch.x,
                                                             CS.out.vEgo, CS.odyssey_target_gear, feedback_eligible,
