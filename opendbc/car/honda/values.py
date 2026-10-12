@@ -48,6 +48,10 @@ class CarControllerParams:
     assert CP.lateralParams.torqueV[0] == 0
     self.STEER_LOOKUP_BP = [v * -1 for v in CP.lateralParams.torqueBP][1:][::-1] + list(CP.lateralParams.torqueBP)
     self.STEER_LOOKUP_V = [v * -1 for v in CP.lateralParams.torqueV][1:][::-1] + list(CP.lateralParams.torqueV)
+    if CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
+      # brikowski/opendbc Odyssey port: STEER_MAX 3840 comes from the interface torque map
+      self.STEER_DELTA_UP = 2
+      self.STEER_DELTA_DOWN = 2
 
 
 class HondaSafetyFlags(IntFlag):
@@ -60,6 +64,8 @@ class HondaSafetyFlags(IntFlag):
   # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
   RLX_STEER_BRIDGE = 64
   NO_ENGINE_DATA_MSG = 128
+  # brikowski/opendbc Odyssey long limits (upstream uses 32, which is NIDEC_HYBRID here)
+  ODYSSEY_LONG = 256
 
 
 class HondaFlags(IntFlag):

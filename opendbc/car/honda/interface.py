@@ -239,9 +239,16 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
+      # brikowski/opendbc Odyssey port: linear 3840 map (upstream STEER_MAX) with the torque controller.
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      # Preserve the physical low/midrange map while exposing a larger normalized ceiling.
+      ret.lateralTuning.torque.latAccelFactor *= 1.5
+      ret.lateralTuning.torque.friction /= 1.5
       ret.steerActuatorDelay = 0.15
+      # brikowski/opendbc Odyssey port: the command-following controller is built on comma's gas map,
+      # which starts at -0.2 m/s^2 (MVL's shared Bosch map starts at 0.0)
+      CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
@@ -307,6 +314,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_ALT.value
     if ret.openpilotLongitudinalControl and ret.flags & HondaFlags.BOSCH:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
+      if candidate == CAR.HONDA_ODYSSEY_5G_MMR:
+        ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ODYSSEY_LONG.value
     if ret.flags & HondaFlags.BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate == CAR.ACURA_INTEGRA:
