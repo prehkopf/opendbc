@@ -170,7 +170,6 @@ class HondaPcmEnableBase(common.CarSafetyTest):
 
 
 class HondaBase(common.CarSafetyTest):
-  cnt_button = 0
   MAX_BRAKE = 255
   PT_BUS: int | None = None  # must be set when inherited
   STEER_BUS: int | None = None  # must be set when inherited

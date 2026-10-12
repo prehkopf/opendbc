@@ -1,4 +1,3 @@
-import unittest
 
 from opendbc.sunnypilot.car.hyundai.values import HyundaiSafetyFlagsSP
 from opendbc.safety.tests.libsafety import libsafety_py
