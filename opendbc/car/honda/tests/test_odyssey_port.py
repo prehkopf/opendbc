@@ -272,6 +272,14 @@ class TestOdysseySteeringAuthority(unittest.TestCase):
 
 
 class TestOdysseyLongitudinal(unittest.TestCase):
+  def test_actuator_delay_matches_controller_tuning(self):
+    # the Odyssey controller was tuned and driven with the stock 0.5 s planner delay; other Bosch cars keep 0.25 s
+    for alpha_long in (False, True):
+      CP = CarInterface.get_params(CAR.HONDA_ODYSSEY_5G_MMR, gen_empty_fingerprint(), [], alpha_long, False, False)
+      self.assertAlmostEqual(CP.longitudinalActuatorDelay, 0.5)
+    CP = CarInterface.get_params(CAR.HONDA_ACCORD, gen_empty_fingerprint(), [], True, False, False)
+    self.assertAlmostEqual(CP.longitudinalActuatorDelay, 0.25)
+
   def test_gas_entry_waits_for_received_brake_release(self):
     CP = CarInterface.get_params(CAR.HONDA_ODYSSEY_5G_MMR, gen_empty_fingerprint(), [], True, False, False)
     dbc = DBC[CP.carFingerprint][Bus.pt]

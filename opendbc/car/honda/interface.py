@@ -94,6 +94,8 @@ class CarInterface(CarInterfaceBase):
         ret.longitudinalActuatorDelay = 0.25 # s
       elif candidate in HONDA_BOSCH_CANFD:
         ret.longitudinalActuatorDelay = 0.05 # set to near zero, canfd seems to have stock feedforward correction
+      elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
+        ret.longitudinalActuatorDelay = 0.5 # s, brikowski's Odyssey controller is tuned against the stock planner delay
       else:
         ret.longitudinalActuatorDelay = 0.25 # s, per Bosch A log
     else:
