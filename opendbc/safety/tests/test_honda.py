@@ -783,6 +783,7 @@ class TestHondaBoschLongAltBrakeSafety(TestHondaBoschLongSafety, TestHondaBoschA
 
 class TestHondaBoschLongOdysseySafety(TestHondaBoschLongAltBrakeSafety):
   SAFETY_PARAM = TestHondaBoschLongAltBrakeSafety.SAFETY_PARAM | HondaSafetyFlags.ODYSSEY_LONG
+  MAX_GAS = 2000
   MIN_GAS = -60
 
 
