@@ -1,3 +1,5 @@
+> **prehkopf/opendbc (`ody-next`, `ody-test`):** car code for my 2022 Honda Odyssey build of sunnypilot ([prehkopf/openpilot](https://github.com/prehkopf/openpilot/tree/ody-next)). It combines [sunnypilot's opendbc](https://github.com/sunnypilot/opendbc), [MVL's Honda work](https://github.com/mvl-boston/opendbc) and [brikowski's Odyssey controller](https://github.com/brikowski/opendbc/tree/ody-op), all on comma.ai's opendbc. The Odyssey longitudinal controller, its safety limits and `opendbc/car/honda/tests/test_odyssey_port.py` are brikowski's work, adapted to MVL's base. Everything below is comma's original README.
+
 <div align="center" style="text-align: center;">
 
 <h1>opendbc</h1>
