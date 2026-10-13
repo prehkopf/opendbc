@@ -16,7 +16,8 @@ from opendbc.car.honda.carcontroller import (ODYSSEY_GAS_BRIDGE_COMMAND, ODYSSEY
                                              ODYSSEY_RESPONSE_CAPPED_COUNTS_PER_ACCEL, ODYSSEY_RESPONSE_COUNTS_PER_ACCEL,
                                              ODYSSEY_RESPONSE_DELAY_FRAMES, ODYSSEY_RESPONSE_MAX_COUNTS, ODYSSEY_RESPONSE_SLEW_COUNTS,
                                              ODYSSEY_ROAD_BRAKE_ENTRY, ODYSSEY_STEER_ERROR_FRAMES,
-                                             ODYSSEY_UPHILL_GAS_ACCEL_MAX, CarController, odyssey_brake_release,
+                                             ODYSSEY_UPHILL_GAS_ACCEL_MAX, ODYSSEY_LOAD_FACTORS, CarController,
+                                             odyssey_brake_release, odyssey_load_factor, odyssey_load_gas_accel,
                                              OdysseySteeringAuthority,
                                              OdysseyCoastResponse, OdysseyGasCoastRelease, OdysseyGasResponse,
                                              odyssey_command_domains, odyssey_gas_command, odyssey_grade_weight,
@@ -279,6 +280,59 @@ class TestOdysseyLongitudinal(unittest.TestCase):
       self.assertAlmostEqual(CP.longitudinalActuatorDelay, 0.5)
     CP = CarInterface.get_params(CAR.HONDA_ACCORD, gen_empty_fingerprint(), [], True, False, False)
     self.assertAlmostEqual(CP.longitudinalActuatorDelay, 0.25)
+
+  def test_load_preset_maps_to_bounded_gas_scale(self):
+    self.assertEqual([odyssey_load_factor(p) for p in (0, 1, 2)], list(ODYSSEY_LOAD_FACTORS))
+    for bad in (None, -1, 3, "x", 1.5e9):
+      self.assertEqual(odyssey_load_factor(bad), 1.0)
+    self.assertEqual(ODYSSEY_LOAD_FACTORS[0], 1.0)
+    self.assertTrue(all(1.0 <= f <= 1.3 for f in ODYSSEY_LOAD_FACTORS))
+    self.assertEqual(sorted(ODYSSEY_LOAD_FACTORS), list(ODYSSEY_LOAD_FACTORS))
+
+  def test_load_scales_only_positive_gas_map_input(self):
+    for factor in ODYSSEY_LOAD_FACTORS:
+      self.assertAlmostEqual(odyssey_load_gas_accel(0.8, factor), 0.8 * factor)
+      self.assertEqual(odyssey_load_gas_accel(0.0, factor), 0.0)
+      self.assertEqual(odyssey_load_gas_accel(-0.15, factor), -0.15)
+
+  def test_load_preset_raises_issued_gas_within_map_limit(self):
+    CP = CarInterface.get_params(CAR.HONDA_ODYSSEY_5G_MMR, gen_empty_fingerprint(), [], True, False, False)
+    dbc = DBC[CP.carFingerprint][Bus.pt]
+    gas_max = CarControllerParams.BOSCH_GAS_LOOKUP_V[-1]
+
+    def issued_gas(factor, accel, pitch=0.):
+      controller = CarController({Bus.pt: dbc}, CP, _sp(CP))
+      controller._read_odyssey_load_factor = lambda: factor
+      controller.odyssey_load_factor = factor
+      CS = CarState(CP, _sp(CP))
+      CS.update(CS.get_can_parsers(CP, CS.CP_SP))
+      CS.out = structs.CarState(vEgo=20., aEgo=accel, canValid=True)
+      CS.odyssey_target_gear = 7
+      CS.odyssey_car_gas = 0.
+      CS.odyssey_computer_braking = False
+      CS.odyssey_user_brake = 0.
+      control = structs.CarControl(enabled=True, longActive=True, orientationNED=[0., pitch, 0.])
+      control.actuators.accel = accel
+      control.actuators.longControlState = structs.CarControl.Actuators.LongControlState.pid
+      output = None
+      for _ in range(4):
+        now = 1_000_000_000 + controller.frame * 10_000_000
+        CS.odyssey_engine_torque_ts_nanos = CS.odyssey_target_gear_ts_nanos = CS.odyssey_computer_braking_ts_nanos = now - 5_000_000
+        output, _ = controller.update(control.as_reader(), structs.CarControlSP(), CS, now)
+      return output.gas
+
+    for accel, pitch in ((0.5, 0.), (1.0, 0.), (0.3, 0.04)):
+      empty = issued_gas(1.0, accel, pitch)
+      self.assertGreater(empty, 0.)
+      for factor in ODYSSEY_LOAD_FACTORS[1:]:
+        loaded = issued_gas(factor, accel, pitch)
+        self.assertGreater(loaded, empty)
+        # the extra gas is the load share of the mapped request, never more than that share of the map
+        self.assertLessEqual(loaded, gas_max)
+        self.assertLessEqual(loaded - empty, (factor - 1.) * gas_max + 1.)
+    # a full request already at the map limit stays there under any load
+    for factor in ODYSSEY_LOAD_FACTORS:
+      self.assertLessEqual(issued_gas(factor, 2.0), gas_max)
 
   def test_gas_entry_waits_for_received_brake_release(self):
     CP = CarInterface.get_params(CAR.HONDA_ODYSSEY_5G_MMR, gen_empty_fingerprint(), [], True, False, False)

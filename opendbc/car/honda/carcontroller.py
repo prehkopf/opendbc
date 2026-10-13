@@ -51,6 +51,12 @@ ODYSSEY_COAST_RELEASE_ERROR = 0.20
 # Keep mild negative road-speed requests out of friction braking. Brake selection remains based on
 # the raw request; gas continuity and response-qualified coast release never add friction braking.
 ODYSSEY_ROAD_BRAKE_ENTRY = -0.30
+# Load presets (param OdysseyLoadPreset: 0 empty, 1 family, 2 family + luggage) scale the gas map input by
+# the mass ratio to the empty van the controller was tuned on (~4500 lb + driver). Uncalibrated until a
+# loaded drive; the panda's gas limit still bounds every preset.
+ODYSSEY_LOAD_PRESET_PARAM = "OdysseyLoadPreset"
+ODYSSEY_LOAD_FACTORS = (1.0, 1.15, 1.25)
+ODYSSEY_LOAD_REFRESH_FRAMES = 200  # re-read the preset every 2 s so a change applies mid-drive
 ODYSSEY_LKA_STEER_MAX = 2560
 ODYSSEY_STEER_ERROR_MIN = 0.10
 ODYSSEY_STEER_ERROR_FRAMES = 20
@@ -110,6 +116,20 @@ def odyssey_gas_command(accel, mapped_gas, gas_selected, previous_gas, bridge_ac
   bridge_active = gas_selected and accel < 0.0 and (bridge_active or not previous_gas)
   gas = ODYSSEY_GAS_BRIDGE_COMMAND + grade_weight * (mapped_gas - ODYSSEY_GAS_BRIDGE_COMMAND) if bridge_active else mapped_gas
   return (gas if gas_selected else 0.0), bridge_active
+
+
+def odyssey_load_factor(preset):
+  """Map a stored load preset to its gas scale; anything unrecognised is the empty van."""
+  try:
+    index = int(preset)
+  except (TypeError, ValueError):
+    return 1.0
+  return ODYSSEY_LOAD_FACTORS[index] if 0 <= index < len(ODYSSEY_LOAD_FACTORS) else 1.0
+
+
+def odyssey_load_gas_accel(gas_accel, load_factor):
+  """Scale the positive (force-producing) gas map input by vehicle mass; negative input stays unmapped."""
+  return gas_accel * load_factor if gas_accel > 0.0 else gas_accel
 
 
 def odyssey_grade_weight(pitch):
@@ -595,6 +615,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.odyssey_coast_response = OdysseyCoastResponse()
     self.odyssey_gas_coast_release = OdysseyGasCoastRelease()
     self.odyssey_pitch = FirstOrderFilter(0.0, ODYSSEY_GRADE_FILTER_TAU, DT_CTRL)
+    self.odyssey_load_factor = self._read_odyssey_load_factor()
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
@@ -771,6 +792,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
 
+  def _read_odyssey_load_factor(self):
+    if self.CP.carFingerprint != CAR.HONDA_ODYSSEY_5G_MMR:
+      return 1.0
+    try:
+      return odyssey_load_factor(Params().get(ODYSSEY_LOAD_PRESET_PARAM))
+    except Exception:
+      # an unreadable or unregistered param must never stop the controller; fall back to the tuned empty van
+      return 1.0
+
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
@@ -780,6 +810,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     pcm_cancel_cmd = CC.cruiseControl.cancel
     odyssey_pitch_valid = (self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR and
                            len(CC.orientationNED) == 3 and math.isfinite(CC.orientationNED[1]))
+    if self.frame % ODYSSEY_LOAD_REFRESH_FRAMES == 0:
+      self.odyssey_load_factor = self._read_odyssey_load_factor()
     if odyssey_pitch_valid:
       self.odyssey_pitch.update(CC.orientationNED[1])
     elif self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
@@ -1470,7 +1502,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             # brikowski/opendbc Odyssey command-following controller (domains selected below)
             self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
             previous_gas_command = self.gas
-            self.gas = float(np.interp(accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+            self.gas = float(np.interp(odyssey_load_gas_accel(accel, self.odyssey_load_factor),
+                                       self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
           stopping = actuators.longControlState == LongCtrlState.stopping
           gas_domain = None
           brake_domain = None
@@ -1563,7 +1596,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             self.odyssey_brake_selected = CC.longActive and brake_selected
             self.odyssey_gas_selected = gas_selected
             if gas_selected and gas_accel != accel:
-              self.gas = float(np.interp(gas_accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+              self.gas = float(np.interp(odyssey_load_gas_accel(gas_accel, self.odyssey_load_factor),
+                                         self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
             feedback_eligible = (CC.longActive and gas_selected and previous_gas and
                                  not self.odyssey_gas_bridge_active and odyssey_pitch_valid and
                                  actuators.longControlState == LongCtrlState.pid and
