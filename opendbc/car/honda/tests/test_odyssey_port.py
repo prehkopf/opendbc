@@ -6,6 +6,7 @@ import sys
 import unittest
 from collections import deque
 from itertools import product
+from unittest.mock import patch
 
 from opendbc.can import CANPacker
 from opendbc.can.parser import CANParser
@@ -301,9 +302,11 @@ class TestOdysseyLongitudinal(unittest.TestCase):
     gas_max = CarControllerParams.BOSCH_GAS_LOOKUP_V[-1]
 
     def issued_gas(factor, accel, pitch=0.):
+      with patch.object(CarController, "_read_odyssey_load_factor", lambda self: factor):
+        return _issued_gas(accel, pitch)
+
+    def _issued_gas(accel, pitch):
       controller = CarController({Bus.pt: dbc}, CP, _sp(CP))
-      controller._read_odyssey_load_factor = lambda: factor
-      controller.odyssey_load_factor = factor
       CS = CarState(CP, _sp(CP))
       CS.update(CS.get_can_parsers(CP, CS.CP_SP))
       CS.out = structs.CarState(vEgo=20., aEgo=accel, canValid=True)

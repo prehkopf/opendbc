@@ -10,6 +10,7 @@ usage: odyssey_load_sim.py           print the summary table (true load x load s
 """
 import math
 from collections import deque
+from unittest.mock import patch
 
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, gen_empty_fingerprint, structs
 from opendbc.car.honda.carcontroller import ODYSSEY_LOAD_FACTORS, CarController
@@ -41,13 +42,17 @@ def planner_accel(v, v_set):
 
 
 def run(scenario, true_load, setting):
+  factor = ODYSSEY_LOAD_FACTORS[setting]
+  # stand in for the device param so the sim never touches this machine's params
+  with patch.object(CarController, "_read_odyssey_load_factor", lambda self: factor):
+    return simulate(scenario, true_load)
+
+
+def simulate(scenario, true_load):
   v0, v_set, grade_pct, seconds = SCENARIOS[scenario]
   CP = CarInterface.get_params(CAR.HONDA_ODYSSEY_5G_MMR, gen_empty_fingerprint(), [], True, False, False)
   CP_SP = CarInterface.get_params_sp(CP, CP.carFingerprint, gen_empty_fingerprint(), [], True, False, False)
   controller = CarController({Bus.pt: DBC[CP.carFingerprint][Bus.pt]}, CP, CP_SP)
-  factor = ODYSSEY_LOAD_FACTORS[setting]
-  controller._read_odyssey_load_factor = lambda: factor
-  controller.odyssey_load_factor = factor
   CS = CarState(CP, CP_SP)
   CS.update(CS.get_can_parsers(CP, CP_SP))
 
@@ -96,7 +101,7 @@ def main():
         r = run(scenario, true_load, setting)
         reach = f"{r['t_reach']:.1f}" if r['t_reach'] is not None else "-"
         mark = " <" if setting_name == load_name else ""
-        print(f"{scenario:20} {load_name:17} {setting_name:17} {r['final_v']:9.2f} {r['shortfall']:6.2f} "
+        print(f"{scenario:20} {load_name:17} {setting_name:17} {r['final_v']:9.2f} {r['shortfall']:6.2f} " +
               f"{r['mean_track_err']:+9.3f} {reach:>7} {r['max_gas']:7.0f}{mark}")
     print()
 

@@ -119,7 +119,7 @@ def odyssey_gas_command(accel, mapped_gas, gas_selected, previous_gas, bridge_ac
 
 
 def odyssey_load_factor(preset):
-  """Map a stored load preset to its gas scale; anything unrecognised is the empty van."""
+  """Map a stored load preset to its gas scale; anything unrecognized is the empty van."""
   try:
     index = int(preset)
   except (TypeError, ValueError):
