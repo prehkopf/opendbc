@@ -740,7 +740,7 @@ class TestOdysseyLongitudinal(unittest.TestCase):
         for _ in range(100):
           correction = response.update(.2, -.8, 0., 20., 7, True, limits=(-available, 700.))
           self.assertLessEqual(correction, 700.)
-          self.assertLessEqual(response.integral, ODYSSEY_RESPONSE_MAX_COUNTS)
+          self.assertLessEqual(response.integral, 700.)
 
   def test_gas_feedback_reaches_zero_without_changing_acceleration(self):
     CP = CarInterface.get_params(CAR.HONDA_ODYSSEY_5G_MMR, gen_empty_fingerprint(), [], True, False, False)
@@ -818,7 +818,7 @@ class TestOdysseyLongitudinal(unittest.TestCase):
   def test_gas_response_converges_after_request_change_with_available_headroom(self):
     # Illustrative delayed plant: a convergence regression, not an identified Honda gas gain.
     for gain in (.001, .003):
-      for bias in (-.06, .06, .3):
+      for bias in (-.3, -.06, .06, .3):
         for cap in (0., 1.):
           with self.subTest(gain=gain, bias=bias, cap=cap):
             response = OdysseyGasResponse()
@@ -828,7 +828,7 @@ class TestOdysseyLongitudinal(unittest.TestCase):
             errors = []
             for frame in range(2000):
               request = .2 if frame < 1000 else .1
-              correction = response.update(request, achieved, 0., 20., 6, True, cap_weight=cap, limits=(-600., 100.))
+              correction = response.update(request, achieved, 0., 20., 6, True, cap_weight=cap, limits=(-600., 600.))
               command = request + gain * correction
               if frame == 1000:
                 self.assertLess(command, previous_command)
@@ -888,7 +888,7 @@ class TestOdysseyLongitudinal(unittest.TestCase):
         self.assertEqual(response.update(.2, .2, 0., 20., 6, True, limits=invalid_limits), 0.)
         self.assertEqual(response.integral, 0.)
 
-  def test_gas_response_output_headroom_preserves_positive_memory_bound(self):
+  def test_gas_response_headroom_preserves_warmup_memory_bound(self):
     for upper in (150., 600.):
       with self.subTest(upper=upper):
         response = OdysseyGasResponse()
@@ -897,7 +897,7 @@ class TestOdysseyLongitudinal(unittest.TestCase):
           correction = response.update(.2, -.5, .04, 20., 6, True, limits=(-600., upper))
           self.assertLessEqual(correction, upper)
           self.assertLessEqual(abs(correction - previous), ODYSSEY_RESPONSE_SLEW_COUNTS)
-          self.assertLessEqual(response.integral, ODYSSEY_RESPONSE_MAX_COUNTS)
+          self.assertLessEqual(response.integral, upper)
         self.assertGreater(correction, ODYSSEY_RESPONSE_MAX_COUNTS)
         issued = correction
         for _ in range(ODYSSEY_RESPONSE_DELAY_FRAMES):
@@ -1208,7 +1208,7 @@ class TestOdysseyLongitudinal(unittest.TestCase):
         mapped = gas_values[0] + (request - bp[0]) / (bp[-1] - bp[0]) * (ceiling - gas_values[0])
         self.assertLessEqual(max(values), ceiling)
         self.assertLessEqual(high.odyssey_gas_response.correction, ceiling - mapped + 1e-6)
-        self.assertLessEqual(high.odyssey_gas_response.integral, ODYSSEY_RESPONSE_MAX_COUNTS)
+        self.assertLessEqual(high.odyssey_gas_response.integral, ceiling - mapped + 1e-6)
         if request in (1.2, 1.6):
           self.assertGreater(high.odyssey_gas_response.correction, ODYSSEY_RESPONSE_MAX_COUNTS)
         if request == 2.0:
