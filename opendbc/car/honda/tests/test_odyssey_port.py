@@ -23,7 +23,8 @@ from opendbc.car.honda.carcontroller import (ODYSSEY_GAS_BRIDGE_COMMAND, ODYSSEY
                                              OdysseyCoastResponse, OdysseyGasCoastRelease, OdysseyGasResponse,
                                              odyssey_command_domains, odyssey_gas_command, odyssey_grade_weight,
                                              odyssey_creep_brake_accel, odyssey_low_speed_gas_command,
-                                             odyssey_uphill_gas_accel_with_cap)
+                                             odyssey_uphill_gas_accel_with_cap, ODYSSEY_GAS_MAP_FLOOR,
+)
 from opendbc.car.honda.values import CAR, CarControllerParams
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.interface import CarInterface
@@ -535,12 +536,12 @@ class TestOdysseyLongitudinal(unittest.TestCase):
       with self.subTest(pitch=pitch):
         zero = odyssey_uphill_gas_accel_with_cap(0.0, pitch)[0]
         self.assertLess(zero, -0.05)
-        self.assertGreaterEqual(zero, CarControllerParams.BOSCH_GAS_LOOKUP_BP[0])
+        self.assertGreaterEqual(zero, ODYSSEY_GAS_MAP_FLOOR)
         requests = [-0.3 + i * 0.001 for i in range(901)]
         mapped = [odyssey_uphill_gas_accel_with_cap(q, pitch) for q in requests]
         self.assertTrue(all(left[0] <= right[0] for left, right in zip(mapped, mapped[1:], strict=False)))
         self.assertTrue(all(weight == 0.0 for _, weight in mapped))
-        for request in (0.0, 0.3, CarControllerParams.BOSCH_GAS_LOOKUP_BP[0] - math.sin(pitch) * ACCELERATION_DUE_TO_GRAVITY * ODYSSEY_GRADE_GAIN):
+        for request in (0.0, 0.3, ODYSSEY_GAS_MAP_FLOOR - math.sin(pitch) * ACCELERATION_DUE_TO_GRAVITY * ODYSSEY_GRADE_GAIN):
           self.assertAlmostEqual(odyssey_uphill_gas_accel_with_cap(request - 1e-6, pitch)[0],
                                  odyssey_uphill_gas_accel_with_cap(request + 1e-6, pitch)[0], delta=3e-6)
 
