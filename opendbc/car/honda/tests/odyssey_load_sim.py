@@ -7,6 +7,8 @@ Force terms scale with 1/mass_ratio; gravity along the road does not. Brake-doma
 delivered by the car's own brake controller. The planner is a speed-tracking stand-in for openpilot's.
 
 usage: odyssey_load_sim.py           print the summary table (true load x load setting x scenario)
+       odyssey_load_sim.py --learner today's controller vs brikowski's 11-01 learner (Kennesaw, OdysseyLearner),
+                                     matched load, per scenario
 """
 import math
 from collections import deque
@@ -33,6 +35,10 @@ SCENARIOS = {
   "4% climb, hold 25": (25.0, 25.0, 4.0, 40.0),
   "4% climb 15->25": (15.0, 25.0, 4.0, 45.0),
   "level cruise 25": (25.0, 25.0, 0.0, 30.0),
+  # Kennesaw: the Ideal drive report's uphill gap (+0.5 asked, +0.15 delivered above 1.5 deg) and a descent
+  "3% climb 18->22": (18.0, 22.0, 3.0, 40.0),
+  "2% climb hold 20": (20.0, 20.0, 2.0, 40.0),
+  "4% descent hold 25": (25.0, 25.0, -4.0, 40.0),
 }
 
 
@@ -41,10 +47,11 @@ def planner_accel(v, v_set):
   return max(-1.0, min(1.2, 0.35 * (v_set - v)))
 
 
-def run(scenario, true_load, setting):
+def run(scenario, true_load, setting, learner=False):
   factor = ODYSSEY_LOAD_FACTORS[setting]
-  # stand in for the device param so the sim never touches this machine's params
-  with patch.object(CarController, "_read_odyssey_load_factor", lambda self: factor):
+  # stand in for the device params so the sim never touches this machine's params
+  with (patch.object(CarController, "_read_odyssey_load_factor", lambda self: factor),
+        patch.object(CarController, "_read_odyssey_learner", lambda self: learner)):
     return simulate(scenario, true_load)
 
 
@@ -90,7 +97,21 @@ def simulate(scenario, true_load):
     if t_reach is None and v >= v_set - 0.5 and v0 < v_set - 0.5:
       t_reach = i * DT_CTRL
   mean_err = sum(track_err) / len(track_err)
-  return {"final_v": v, "shortfall": v_set - v, "mean_track_err": mean_err, "max_gas": max_gas, "t_reach": t_reach}
+  rms_err = math.sqrt(sum(e * e for e in track_err) / len(track_err))
+  return {"final_v": v, "shortfall": v_set - v, "mean_track_err": mean_err, "rms_track_err": rms_err, "max_gas": max_gas,
+          "t_reach": t_reach}
+
+
+def compare_learner():
+  print(f"{'scenario':20} {'load':8} {'controller':10} {'end speed':>9} {'short':>6} {'accel err':>9} {'rms':>6} {'reach s':>7} {'max gas':>7}")
+  for scenario in SCENARIOS:
+    for load_name in ("empty", "family"):
+      for name, learner in (("today", False), ("learner", True)):
+        r = run(scenario, LOADS[load_name], SETTINGS[load_name], learner)
+        reach = f"{r['t_reach']:.1f}" if r['t_reach'] is not None else "-"
+        print(f"{scenario:20} {load_name:8} {name:10} {r['final_v']:9.2f} {r['shortfall']:6.2f} {r['mean_track_err']:+9.3f} " +
+              f"{r['rms_track_err']:6.3f} {reach:>7} {r['max_gas']:7.0f}")
+    print()
 
 
 def main():
@@ -107,4 +128,5 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  import sys
+  compare_learner() if "--learner" in sys.argv else main()

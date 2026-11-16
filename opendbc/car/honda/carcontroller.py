@@ -17,6 +17,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
+from opendbc.car.honda import odyssey_learner
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
@@ -590,6 +591,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.odyssey_pitch = FirstOrderFilter(0.0, ODYSSEY_GRADE_FILTER_TAU, DT_CTRL)
     self.odyssey_load_factor = self._read_odyssey_load_factor()
     self.odyssey_rdm_off = self._read_odyssey_rdm_off()
+    # Kennesaw: brikowski's 11-01 learner (odyssey_learner.py) when OdysseyLearner is on; None = today's controller
+    self.odyssey_learner = odyssey_learner.OdysseyLearnerState() if self._read_odyssey_learner() else None
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
@@ -783,6 +786,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     except Exception:
       return False  # unreadable or unregistered: the HUD as before
 
+  def _read_odyssey_learner(self):
+    if self.CP.carFingerprint != CAR.HONDA_ODYSSEY_5G_MMR or not self.CP.openpilotLongitudinalControl:
+      return False
+    try:
+      return bool(Params().get_bool(odyssey_learner.ODYSSEY_LEARNER_PARAM))
+    except Exception:
+      return False  # unreadable or unregistered: today's controller
+
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
@@ -894,6 +905,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       self.odyssey_gas_bridge_active = False
       self.odyssey_gas_response.reset()
       self.odyssey_gas_coast_release.reset()
+      if self.odyssey_learner is not None:
+        self.odyssey_learner.disengage()
 
     if CC.longActive and not (self.CP.flags & HondaFlags.BOSCH):
       accel = self.accel
@@ -1479,6 +1492,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           else:
             # brikowski/opendbc Odyssey command-following controller (domains selected below)
+            previous_accel = self.accel
             self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
             previous_gas_command = self.gas
             self.gas = float(np.interp(odyssey_load_gas_accel(accel, self.odyssey_load_factor),
@@ -1486,7 +1500,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           stopping = actuators.longControlState == LongCtrlState.stopping
           gas_domain = None
           brake_domain = None
-          if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
+          if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR and self.odyssey_learner is not None:
+            # Kennesaw, OdysseyLearner on: brikowski's 11-01 Odyssey branch (odyssey_learner.py)
+            gas_domain, brake_domain = odyssey_learner.odyssey_learner_long(
+              self, self.odyssey_learner, CC, CS, accel, now_nanos, odyssey_pitch_valid, previous_gas_command, previous_accel,
+              self.odyssey_load_factor)
+          elif self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
             previous_gas = self.odyssey_gas_selected
             # Inactive brake feedback represents passive response only after the command settles.
             settled_brake = ((self.odyssey_brake_selected or self.odyssey_coast_response.gear == CS.odyssey_target_gear) and
