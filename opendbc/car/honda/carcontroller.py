@@ -57,6 +57,11 @@ ODYSSEY_ROAD_BRAKE_ENTRY = -0.30
 ODYSSEY_LOAD_PRESET_PARAM = "OdysseyLoadPreset"
 ODYSSEY_LOAD_FACTORS = (1.0, 1.15, 1.25)
 ODYSSEY_LOAD_REFRESH_FRAMES = 200  # re-read the preset every 2 s so a change applies mid-drive
+# Param OdysseyRdmOff (Jasper, default off = LKAS_HUD as before): under openpilot long the Odyssey sends the single
+# LKAS_HUD, but RDM_OFF / LANE_ASSIST_BEEP_OFF were only set for cars without the extended HUD. MVL (odytest
+# 0a3644502, "Odyssey alphalong: RDM_OFF on LKAS_HUD") sets them under openpilot long; ported by content, behind a toggle
+# because it tells the van its road departure mitigation is off. Read once per drive.
+ODYSSEY_RDM_OFF_PARAM = "OdysseyRdmOff"
 def odyssey_command_domains(accel, speed, previous_brake=False, previous_gas=False, bridge_active=False,
                             gas_accel=None, release_brake=False, release_gas=False, passive_accel=None):
   """Keep low-speed stop authority and separate road-speed coast from friction braking."""
@@ -584,6 +589,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.odyssey_gas_coast_release = OdysseyGasCoastRelease()
     self.odyssey_pitch = FirstOrderFilter(0.0, ODYSSEY_GRADE_FILTER_TAU, DT_CTRL)
     self.odyssey_load_factor = self._read_odyssey_load_factor()
+    self.odyssey_rdm_off = self._read_odyssey_rdm_off()
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
@@ -768,6 +774,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     except Exception:
       # an unreadable or unregistered param must never stop the controller; fall back to the tuned empty van
       return 1.0
+
+  def _read_odyssey_rdm_off(self):
+    if self.CP.carFingerprint != CAR.HONDA_ODYSSEY_5G_MMR or not self.CP.openpilotLongitudinalControl:
+      return False
+    try:
+      return bool(Params().get_bool(ODYSSEY_RDM_OFF_PARAM))
+    except Exception:
+      return False  # unreadable or unregistered: the HUD as before
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -1714,7 +1728,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, self.dashed_lanes,
-                                                steer_maxed, CS, lkas_state_change=lkas_state_change))
+                                                steer_maxed, CS, lkas_state_change=lkas_state_change,
+                                                rdm_off=self.odyssey_rdm_off))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated

@@ -187,7 +187,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
 
 def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, dashed_lanes,
-                    steer_maxed, CS, lkas_state_change=None):
+                    steer_maxed, CS, lkas_state_change=None, rdm_off=False):
   commands = []
 
   lkas_hud_values = {
@@ -235,7 +235,8 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       # without MADS, lat_active == enabled while moving, so this stays equivalent there.
       lkas_hud_values['SOLID_LANES'] = lat_active
 
-  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
+  # rdm_off: Odyssey under openpilot long with OdysseyRdmOff on (MVL odytest 0a3644502); it sends the single LKAS_HUD
+  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD) or (rdm_off and CP.openpilotLongitudinalControl):
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
 
